@@ -283,7 +283,7 @@ defmodule WebSockex.Frame do
 
   # Encode Close Frames
   def encode_frame({:close, close_code, <<payload::binary>>})
-      when not (close_code in 1000..4999) do
+      when close_code not in 1000..4999 do
     {:error,
      %WebSockex.FrameEncodeError{
        reason: :close_code_out_of_range,
