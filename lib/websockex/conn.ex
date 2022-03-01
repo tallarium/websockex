@@ -23,7 +23,11 @@ defmodule WebSockex.Conn do
             cacerts: nil,
             insecure: true,
             resp_headers: [],
-            ssl_options: nil
+            ssl_options: nil,
+            proxy_host: nil,
+            proxy_port: 0,
+            proxy_username: nil,
+            proxy_password: nil
 
   @type socket :: :gen_tcp.socket() | :ssl.sslsocket()
   @type header :: {field :: String.t(), value :: String.t()}
@@ -57,6 +61,10 @@ defmodule WebSockex.Conn do
           | {:socket_connect_timeout, non_neg_integer}
           | {:socket_recv_timeout, non_neg_integer}
           | {:ssl_options, [:ssl.tls_client_option()]}
+          | {:proxy_host, String.t()}
+          | {:proxy_port, integer()}
+          | {:proxy_username, String.t()}
+          | {:proxy_password, String.t()}
 
   @type t :: %__MODULE__{
           conn_mod: :gen_tcp | :ssl,
@@ -69,7 +77,11 @@ defmodule WebSockex.Conn do
           socket: socket | nil,
           socket_connect_timeout: non_neg_integer,
           socket_recv_timeout: non_neg_integer,
-          resp_headers: [header]
+          resp_headers: [header],
+          proxy_host: String.t() | nil,
+          proxy_port: integer(),
+          proxy_username: String.t() | nil,
+          proxy_password: String.t() | nil
         }
 
   @doc """
@@ -95,7 +107,11 @@ defmodule WebSockex.Conn do
       socket_connect_timeout:
         Keyword.get(opts, :socket_connect_timeout, @socket_connect_timeout_default),
       socket_recv_timeout: Keyword.get(opts, :socket_recv_timeout, @socket_recv_timeout_default),
-      ssl_options: Keyword.get(opts, :ssl_options, nil)
+      ssl_options: Keyword.get(opts, :ssl_options, nil),
+      proxy_host: Keyword.get(opts, :proxy_host, nil),
+      proxy_port: Keyword.get(opts, :proxy_port, 3128),
+      proxy_username: Keyword.get(opts, :proxy_username, nil),
+      proxy_password: Keyword.get(opts, :proxy_password, nil)
     }
   end
 
