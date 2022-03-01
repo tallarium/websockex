@@ -1038,6 +1038,7 @@ defmodule WebSockex do
                WebSockex.Conn.build_proxy_request(conn),
              :ok <- WebSockex.Conn.socket_send(conn, proxy_request),
              {:ok, _proxy_headers} <- WebSockex.Conn.handle_proxy_response(conn),
+             {:ok, conn} <- WebSockex.Conn.socket_upgrade(conn),
              {:ok, request} <- WebSockex.Conn.build_request(conn, key),
              :ok <- WebSockex.Conn.socket_send(conn, request),
              {:ok, headers} <- WebSockex.Conn.handle_response(conn, my_pid),

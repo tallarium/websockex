@@ -15,6 +15,7 @@ defmodule WebSockex.Conn do
             port: nil,
             path: nil,
             query: nil,
+            scheme: nil,
             extra_headers: [],
             transport: nil,
             socket: nil,
@@ -72,6 +73,7 @@ defmodule WebSockex.Conn do
           port: non_neg_integer,
           path: String.t(),
           query: String.t() | nil,
+          scheme: String.t() | nil,
           extra_headers: [header],
           transport: transport,
           socket: socket | nil,
@@ -92,13 +94,18 @@ defmodule WebSockex.Conn do
   def new(url, opts \\ [])
 
   def new(%URI{} = uri, opts) do
-    mod = conn_module(uri.scheme)
+    has_proxy? = Keyword.get(opts, :proxy_host, nil) != nil
+
+    # Currently, we connect via HTTP to the proxy, then upgrade
+    # the socket to a SSL one after the CONNECT request
+    mod = conn_module(uri.scheme, has_proxy?)
 
     %WebSockex.Conn{
       host: uri.host,
       port: uri.port,
       path: uri.path,
       query: uri.query,
+      scheme: uri.scheme,
       conn_mod: mod,
       transport: transport(mod),
       extra_headers: Keyword.get(opts, :extra_headers, []),
@@ -156,6 +163,20 @@ defmodule WebSockex.Conn do
     case conn.conn_mod.send(conn.socket, message) do
       :ok -> :ok
       {:error, error} -> {:error, %WebSockex.ConnError{original: error}}
+    end
+  end
+
+  def socket_upgrade(%{conn_mod: :gen_tcp, socket: socket, scheme: scheme} = conn) do
+    if scheme == "https" or scheme === "wss" do
+      case :ssl.connect(socket, ssl_connection_options(conn)) do
+        {:ok, socket} ->
+          {:ok, %{conn | socket: socket, conn_mod: :ssl, transport: :ssl}}
+
+        {:error, error} ->
+          {:error, %WebSockex.ConnError{original: error}}
+      end
+    else
+      {:ok, conn}
     end
   end
 
@@ -320,11 +341,12 @@ defmodule WebSockex.Conn do
   defp transport(:ssl), do: :ssl
   defp transport(_), do: nil
 
-  defp conn_module("ws"), do: :gen_tcp
-  defp conn_module("http"), do: :gen_tcp
-  defp conn_module("wss"), do: :ssl
-  defp conn_module("https"), do: :ssl
-  defp conn_module(_), do: nil
+  defp conn_module(_, true), do: :gen_tcp
+  defp conn_module("ws", _), do: :gen_tcp
+  defp conn_module("http", _), do: :gen_tcp
+  defp conn_module("wss", _), do: :ssl
+  defp conn_module("https", _), do: :ssl
+  defp conn_module(_, _), do: nil
 
   defp wait_for_response(conn, buffer \\ "") do
     case Regex.match?(~r/\r\n\r\n/, buffer) do
