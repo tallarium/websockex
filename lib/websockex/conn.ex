@@ -166,9 +166,11 @@ defmodule WebSockex.Conn do
   def open_socket(conn)
 
   def open_socket(%{conn_mod: :gen_tcp} = conn) do
+    {host, port} = socket_target(conn)
+
     case :gen_tcp.connect(
-           String.to_charlist(conn.host),
-           conn.port,
+           String.to_charlist(host),
+           port,
            [:binary, active: false, packet: 0],
            conn.socket_connect_timeout
          ) do
@@ -194,6 +196,9 @@ defmodule WebSockex.Conn do
         {:error, %WebSockex.ConnError{original: error}}
     end
   end
+
+  defp socket_target(%{proxy_host: nil} = conn), do: {conn.host, conn.port}
+  defp socket_target(conn), do: {conn.proxy_host, conn.proxy_port}
 
   @doc """
   Closes the socket and returns the Conn map without the socket.
@@ -235,6 +240,18 @@ defmodule WebSockex.Conn do
     {:ok, request <> "\r\n\r\n"}
   end
 
+  def build_proxy_request(conn) do
+    headers =
+      [{"Host", conn.host}, {"Proxy-Connection", "keep-alive"}]
+      |> Enum.map(&format_header/1)
+
+    request =
+      ["CONNECT #{conn.host}:#{conn.port} HTTP/1.1" | headers]
+      |> Enum.join("\r\n")
+
+    {:ok, request <> "\r\n\r\n"}
+  end
+
   @doc """
   Waits for the request response, decodes the packet, and returns the response
   headers.
@@ -249,6 +266,20 @@ defmodule WebSockex.Conn do
       # Send excess buffer back to the process
       unless buffer == "" do
         send(owner_pid, {transport(conn.conn_mod), conn.socket, buffer})
+      end
+
+      {:ok, headers}
+    end
+  end
+
+  @spec handle_proxy_response(__MODULE__.t()) ::
+          {:ok, [header]} | {:error, reason :: term}
+  def handle_proxy_response(conn) do
+    with {:ok, buffer} <- wait_for_response(conn),
+         {:ok, headers, buffer} <- decode_proxy_response(buffer) do
+      # Send excess buffer back to the process
+      unless buffer == "" do
+        send(self(), {transport(conn.conn_mod), conn.socket, buffer})
       end
 
       {:ok, headers}
@@ -313,6 +344,19 @@ defmodule WebSockex.Conn do
   defp decode_response(response) do
     case :erlang.decode_packet(:http_bin, response, []) do
       {:ok, {:http_response, _version, 101, _message}, rest} ->
+        decode_headers(rest)
+
+      {:ok, {:http_response, _, code, message}, _} ->
+        {:error, %WebSockex.RequestError{code: code, message: message}}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  defp decode_proxy_response(response) do
+    case :erlang.decode_packet(:http_bin, response, []) do
+      {:ok, {:http_response, _version, 200, _message}, rest} ->
         decode_headers(rest)
 
       {:ok, {:http_response, _, code, message}, _} ->
