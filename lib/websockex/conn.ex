@@ -242,7 +242,7 @@ defmodule WebSockex.Conn do
 
   def build_proxy_request(conn) do
     headers =
-      [{"Host", conn.host}, {"Proxy-Connection", "keep-alive"}]
+      ([{"Host", conn.host}, {"Proxy-Connection", "keep-alive"}] ++ proxy_auth_headers(conn))
       |> Enum.map(&format_header/1)
 
     request =
@@ -251,6 +251,14 @@ defmodule WebSockex.Conn do
 
     {:ok, request <> "\r\n\r\n"}
   end
+
+  defp proxy_auth_headers(%{proxy_username: username, proxy_password: password})
+       when not is_nil(username) and not is_nil(password) do
+    credentials = "#{username}:#{password}" |> Base.encode64()
+    [{"Proxy-Authorization", "Basic #{credentials}"}]
+  end
+
+  defp proxy_auth_headers(_), do: []
 
   @doc """
   Waits for the request response, decodes the packet, and returns the response
