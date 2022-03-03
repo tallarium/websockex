@@ -1005,7 +1005,7 @@ defmodule WebSockex do
     end
   end
 
-  defp open_connection(parent, debug, %{conn: conn, proxy_host: nil} = state) do
+  defp open_connection(parent, debug, %{conn: %{proxy_host: nil} = conn} = state) do
     my_pid = self()
     debug = Utils.sys_debug(debug, :connect, state)
 
